@@ -16,48 +16,96 @@ server = app.server
 
 app.layout = dbc.Container([
 
-    html.H1("Tablero de Ventas Farmacéuticas"),
+    html.H1("Tablero de Ventas Farmacéuticas", className="text-center"),
 
-    # Dropdown
-    dcc.Dropdown(
-        id="cat",
-        options=[{"label": c, "value": c} for c in categorias],
-        value="M01AB"
-    ),
+    dbc.Row([
+        dbc.Col([
+            html.Label("Categoría"),
+            dcc.Dropdown(
+                id="cat",
+                options=[{"label": c, "value": c} for c in categorias],
+                value="M01AB"
+            )
+        ], width=4),
 
-    dcc.Graph(id="linea"),
-    dcc.Graph(id="barras"),
-    dcc.Graph(id="torta"),
-    dcc.Graph(id="histograma")
+        dbc.Col([
+            html.Label("Rango de fechas"),
+            dcc.DatePickerRange(
+                id="fecha",
+                min_date_allowed=df["datum"].min(),
+                max_date_allowed=df["datum"].max(),
+                start_date=df["datum"].min(),
+                end_date=df["datum"].max()
+            )
+        ], width=8)
+    ]),
 
-])
+    html.Br(),
+
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="linea"), width=12)
+    ]),
+
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="barras"), width=6),
+        dbc.Col(dcc.Graph(id="torta"), width=6)
+    ]),
+
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="histograma"), width=12)
+    ])
+
+], fluid=True)
+
 
 @app.callback(
     Output("linea", "figure"),
     Output("barras", "figure"),
     Output("torta", "figure"),
     Output("histograma", "figure"),
-    Input("cat", "value")
+    Input("cat", "value"),
+    Input("fecha", "start_date"),
+    Input("fecha", "end_date")
 )
-def actualizar(cat):
+def actualizar(cat, start, end):
 
-    # Línea
-    fig_linea = px.line(df, x="datum", y=cat, title=f"Evolución de {cat}")
+    # Filtrar por fechas
+    dff = df[(df["datum"] >= start) & (df["datum"] <= end)]
 
-    # Barras (suma por año)
-    df_year = df.groupby("Año")[categorias].sum().reset_index()
-    fig_barras = px.bar(df_year, x="Año", y=cat, title="Ventas por año")
+    # 📈 Línea
+    fig_linea = px.line(
+        dff,
+        x="datum",
+        y=cat,
+        title=f"Evolución de {cat}"
+    )
 
-    # Torta (total por categoría)
-    total = df[categorias].sum()
+    # 📊 Barras
+    total = dff[categorias].sum().reset_index()
+    total.columns = ["Categoria", "Ventas"]
+
+    fig_barras = px.bar(
+        total,
+        x="Categoria",
+        y="Ventas",
+        title="Ventas por categoría"
+    )
+
+    # 🥧 Torta
     fig_torta = px.pie(
-        values=total.values,
-        names=total.index,
+        total,
+        names="Categoria",
+        values="Ventas",
         title="Participación por categoría"
     )
 
-    # Histograma
-    fig_hist = px.histogram(df, x=cat, nbins=20, title="Distribución")
+    # 📊 Histograma
+    fig_hist = px.histogram(
+        dff,
+        x=cat,
+        nbins=20,
+        title="Distribución de ventas"
+    )
 
     return fig_linea, fig_barras, fig_torta, fig_hist
 
